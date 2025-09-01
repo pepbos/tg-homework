@@ -1,13 +1,17 @@
+use bitvec::prelude::*;
+
 const MAX_FRAME_LEN: usize = crate::MAX_FRAME_LEN as usize;
 
+type Storage = u8;
+
 struct MagicByteFinder {
-    possible_bytes: [bool; MAX_FRAME_LEN],
+    possible_bytes: BitArr!(for MAX_FRAME_LEN, in Storage, Lsb0),
 }
 
 impl Default for MagicByteFinder {
     fn default() -> Self {
         Self {
-            possible_bytes: [true; MAX_FRAME_LEN],
+            possible_bytes: bitarr![Storage, Lsb0; 1; MAX_FRAME_LEN],
         }
     }
 }
@@ -15,19 +19,20 @@ impl Default for MagicByteFinder {
 impl MagicByteFinder {
     #[inline]
     fn exclude_byte(&mut self, byte: u8) {
-        if byte < crate::MAX_FRAME_LEN {
-            self.possible_bytes[byte as usize] = false;
+        if byte >= crate::MAX_FRAME_LEN {
+            return;
         }
+        self.possible_bytes.set(byte as usize, false);
     }
 
     #[inline]
     fn find_magic_byte(self) -> u8 {
-        for (byte, &is_possible) in self.possible_bytes.iter().enumerate() {
+        for (byte, is_possible) in self.possible_bytes.iter().by_vals().enumerate() {
             if is_possible {
                 return byte as u8;
             }
         }
-        128
+        crate::MAX_FRAME_LEN
     }
 }
 
@@ -48,9 +53,12 @@ pub fn find_magic_byte(data: &[u8]) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::find_magic_byte;
+    use bitvec::prelude::*;
 
     #[test]
     fn test_find_magic_byte() {
+        let arr = bitarr![u32, Lsb0; 0; 80];
+
         use rand::prelude::*;
         let mut rng = rand::rng();
 
