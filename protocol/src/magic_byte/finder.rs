@@ -7,7 +7,7 @@ struct MagicByteFinder {
 impl Default for MagicByteFinder {
     fn default() -> Self {
         Self {
-            possible_bytes: [false; MAX_FRAME_LEN],
+            possible_bytes: [true; MAX_FRAME_LEN],
         }
     }
 }
@@ -51,11 +51,16 @@ mod tests {
 
     #[test]
     fn test_find_magic_byte() {
+        use rand::prelude::*;
+        let mut rng = rand::rng();
+
         // Create some data bytes.
         let mut bytes = [0u8; super::MAX_FRAME_LEN];
         for byte in bytes.iter_mut() {
-            *byte = 0;
+            // TODO do not use random numbers in test.
+            *byte = rng.random::<u8>();
         }
+
         // Find the magic byte.
         let magic_byte = find_magic_byte(&bytes);
         // Test that the magic byte is indeed not part of our data.
