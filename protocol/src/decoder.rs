@@ -40,6 +40,17 @@ impl Default for DecoderState {
     }
 }
 
+pub fn decode_in_place(encoded: &[u8], out: &mut [u8]) -> Result<usize, Error> {
+    let mut decoder = DecoderState::default();
+    for &b in encoded.iter() {
+        decoder.decode_byte_in_place(b, out)?;
+    }
+    match decoder {
+        DecoderState::FrameComplete { len, .. } => Ok(len.into()),
+        _ => Err(Error::FrameIncomplete(decoder)),
+    }
+}
+
 impl DecoderState {
     pub fn decode_byte_in_place(
         &mut self,
