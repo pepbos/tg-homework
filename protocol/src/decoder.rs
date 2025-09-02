@@ -32,99 +32,86 @@ enum Header {
     },
 }
 
-fn check_length_byte(byte: u8) -> Result<(), Error> {
-    if byte > MAX_FRAME_LEN {
-        return Err(Error::InvalidLength(byte));
+impl Default for Header {
+    fn default() -> Self {
+        Self::Start
     }
-    Ok(())
-}
-
-fn check_early_start(byte: u8) -> Result<(), Error> {
-    todo!()
 }
 
 impl Header {
-    fn reset_on_err(&mut self, result: Result<(), Error>) -> Result<(), Error> {
-        if result.is_err() {
-            *self = Header::Start;
+    pub fn decode_byte_in_place(&mut self, encoded_byte: u8, out: &mut [u8]) -> Result<Option<usize>, Error> {
+        *self =
+            core::mem::take(self).calc_updated(encoded_byte, out)?;
+        match self {
+            Header::Complete { len, ..} => Ok(Some((*len).into())),
+            _ => Ok(None),
         }
-        result
     }
 
-    fn decode_in_place(&mut self, encoded_byte: u8, out: &mut [u8]) -> Result<(), Error> {
-        match *self {
-            Header::Start => {
-                *self = Header::MagicByte {
-                    start: StartByte::new_decode(encoded_byte)?,
-                    crc: Crc::new(),
-                };
-            }
-            Header::MagicByte { crc, start } => {
-                let mut crc = crc;
-                // TODO Error if START
+    fn calc_updated(self, encoded_byte: u8, out: &mut [u8]) -> Result<Header, Error> {
+        match self {
+            Header::Start => Ok(Header::MagicByte {
+                start: StartByte::new_decode(encoded_byte)?,
+                crc: Crc::new(),
+            }),
+            Header::MagicByte { mut crc, start } => {
                 let magic_byte = MagicByte::new_decode(encoded_byte, &mut crc)?;
-                *self = Header::Length {
+                Ok(Header::Length {
                     start,
                     magic_byte,
                     crc,
-                }
+                })
             }
             Header::Length {
-                magic_byte,
-                crc,
                 start,
+                magic_byte,
+                mut crc,
             } => {
-                let mut crc = crc;
                 let len = LengthByte::new_decode(magic_byte, encoded_byte, &mut crc)?;
-                *self = Header::Data {
+                Ok(Header::Data {
                     start,
                     magic_byte,
                     crc,
                     len,
                     index: 0,
-                }
+                })
             }
             Header::Data {
-                magic_byte,
-                crc,
-                len,
-                index,
                 start,
+                magic_byte,
+                len,
+                mut index,
+                mut crc,
             } => {
-                let mut crc = crc;
-                let mut index = index;
                 out[index as usize] =
                     DataByte::new_decode(magic_byte, encoded_byte, &mut crc)?.into();
                 index += 1;
-                if index >= len.into() {
-                    *self = Header::Crc {
+                Ok(if index >= len.into() {
+                    Header::Crc {
                         start,
                         magic_byte,
                         len,
                         crc,
                     }
-                }
+                } else {
+                    self
+                })
             }
             Header::Crc {
-                magic_byte,
-                crc,
                 start,
+                magic_byte,
                 len,
-            } => {
-                *self = Header::Complete {
-                    start,
-                    magic_byte,
-                    len,
-                    crc: CrcByte::new_decode(crc, magic_byte, encoded_byte)?,
-                }
-            }
-            Header::Complete {..} => {
-                *self = Header::MagicByte {
-                    start: StartByte::new_decode(encoded_byte)?,
-                    crc: Crc::new(),
-                };
-            }
+                crc,
+            } => Ok(Header::Complete {
+                start,
+                magic_byte,
+                len,
+                crc: CrcByte::new_decode(crc, magic_byte, encoded_byte)?,
+            }),
+            Header::Complete { .. } => Ok(Header::MagicByte {
+                start: StartByte::new_decode(encoded_byte)?,
+                crc: Crc::new(),
+            }),
         }
-        Ok(())
     }
 }

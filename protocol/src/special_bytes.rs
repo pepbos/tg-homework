@@ -123,3 +123,8 @@ impl Into<u8> for LengthByte {
         self.value
     }
 }
+impl Into<usize> for LengthByte {
+    fn into(self) -> usize {
+        self.value as usize
+    }
+}
