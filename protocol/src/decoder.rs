@@ -1,6 +1,7 @@
 use crate::*;
 
-enum DecoderState {
+#[derive(Clone, Debug)]
+pub enum DecoderState {
     AwaitingSync,
     AwaitingEscape {
         start: SyncByte,

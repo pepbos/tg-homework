@@ -1,6 +1,6 @@
 use crate::*;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct SyncByte {
     _private: (),
 }
@@ -22,7 +22,7 @@ fn ensure_not_sync(byte: u8) -> Result<(), Error> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct EscapeByte {
     value: u8,
 }
@@ -43,7 +43,7 @@ impl EscapeByte {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct LenByte {
     value: u8,
 }
@@ -59,7 +59,7 @@ impl LenByte {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct PayloadByte {
     value: u8,
 }
@@ -72,7 +72,7 @@ impl PayloadByte {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct CrcByte {
     _private: (),
 }
@@ -95,18 +95,18 @@ impl CrcByte {
     }
 }
 
-impl Into<u8> for PayloadByte {
-    fn into(self) -> u8 {
-        self.value
+impl From<PayloadByte> for u8 {
+    fn from(payload: PayloadByte) -> Self {
+        payload.value
     }
 }
-impl Into<u8> for LenByte {
-    fn into(self) -> u8 {
-        self.value
+impl From<LenByte> for u8 {
+    fn from(len: LenByte) -> Self {
+        len.value
     }
 }
-impl Into<usize> for LenByte {
-    fn into(self) -> usize {
-        self.value as usize
+impl From<LenByte> for usize {
+    fn from(len: LenByte) -> Self {
+        len.value as usize
     }
 }
