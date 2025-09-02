@@ -74,20 +74,24 @@ impl PayloadByte {
 
 #[derive(Copy, Clone)]
 pub struct CrcByte {
-    value: u8,
+    _private: (),
 }
 
 impl CrcByte {
-    pub fn decode(encoded: u8, escape: EscapeByte, crc: Crc) -> Result<Self, Error> {
-        let value = escape.unescape(encoded);
+    pub fn decode(encoded: [u8; 2], escape: EscapeByte, crc: Crc) -> Result<Self, Error> {
+        let value = encoded.try_map(|b| escape.unescape(b))?;
         let expected = crc.finalize();
-        if value != expected {
+        if !value
+            .iter()
+            .zip(expected.iter())
+            .all(|(got, exp)| got == exp)
+        {
             return Err(Error::InvalidCrc {
                 got: value,
                 expected,
             });
         }
-        Ok(Self { value })
+        Ok(Self { _private: () })
     }
 }
 

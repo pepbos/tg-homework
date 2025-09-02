@@ -45,9 +45,8 @@ pub fn encode_in_place(data: &[u8], out: &mut [u8]) -> usize {
         }
     }
 
-    // Byte[3+LEN]. CRC
-    {
-        let byte = crc.finalize();
+    // Byte[3+LEN, 4+LEN]. CRC
+    for byte in crc.finalize() {
         *iter.next().unwrap() = if byte == SYNC { escape } else { byte };
     }
 
@@ -56,5 +55,5 @@ pub fn encode_in_place(data: &[u8], out: &mut [u8]) -> usize {
 }
 
 pub fn encoded_len(data: &[u8]) -> usize {
-    data.len() + 4
+    data.len() + 5
 }

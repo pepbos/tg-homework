@@ -1,9 +1,10 @@
 #![no_std]
+#![feature(array_try_map)]
 
 mod crc;
-mod escape;
-mod encoder;
 mod decoder;
+mod encoder;
+mod escape;
 mod special_bytes;
 
 pub(crate) use crc::Crc;
@@ -19,5 +20,5 @@ enum Error {
     EarlySync,
     LateSync,
     InvalidLen(u8),
-    InvalidCrc{got: u8, expected: u8},
+    InvalidCrc { got: [u8; 2], expected: [u8; 2] },
 }

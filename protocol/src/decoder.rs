@@ -23,6 +23,7 @@ enum DecoderState {
         escape: EscapeByte,
         len: LenByte,
         crc: Crc,
+        byte_buffer: Option<u8>,
     },
     FrameComplete {
         start: SyncByte,
@@ -89,6 +90,7 @@ impl DecoderState {
                         start,
                         escape,
                         len,
+                        byte_buffer: None,
                         crc,
                     }
                 } else {
@@ -100,11 +102,23 @@ impl DecoderState {
                 escape,
                 len,
                 crc,
-            } => Ok(DecoderState::FrameComplete {
-                start,
-                escape,
-                len,
-                crc: CrcByte::decode(encoded, escape, crc)?,
+                byte_buffer,
+            } => Ok(if let Some(first) = byte_buffer {
+                let second = encoded;
+                DecoderState::FrameComplete {
+                    start,
+                    escape,
+                    len,
+                    crc: CrcByte::decode([first, second], escape, crc)?,
+                }
+            } else {
+                DecoderState::AwaitingCrc {
+                    start,
+                    escape,
+                    len,
+                    byte_buffer: Some(encoded),
+                    crc,
+                }
             }),
             DecoderState::FrameComplete { .. } => Ok(DecoderState::AwaitingEscape {
                 start: SyncByte::decode(encoded)?,
