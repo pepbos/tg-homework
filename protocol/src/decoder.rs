@@ -1,30 +1,30 @@
 use crate::*;
 
-enum Header {
-    Start,
-    MagicByte {
+enum DecoderState {
+    AwaitingSync,
+    AwaitingEscape {
         start: StartByte,
         crc: Crc,
     },
-    Length {
+    AwaitingLen {
         start: StartByte,
         magic_byte: MagicByte,
         crc: Crc,
     },
-    Data {
+    ReadingPayload {
         start: StartByte,
         magic_byte: MagicByte,
         len: LengthByte,
         index: u8,
         crc: Crc,
     },
-    Crc {
+    AwaitingCrc {
         start: StartByte,
         magic_byte: MagicByte,
         len: LengthByte,
         crc: Crc,
     },
-    Complete {
+    FrameComplete {
         start: StartByte,
         magic_byte: MagicByte,
         len: LengthByte,
@@ -32,43 +32,43 @@ enum Header {
     },
 }
 
-impl Default for Header {
+impl Default for DecoderState {
     fn default() -> Self {
-        Self::Start
+        Self::AwaitingSync
     }
 }
 
-impl Header {
+impl DecoderState {
     pub fn decode_byte_in_place(&mut self, encoded_byte: u8, out: &mut [u8]) -> Result<Option<usize>, Error> {
         *self =
             core::mem::take(self).calc_updated(encoded_byte, out)?;
         match self {
-            Header::Complete { len, ..} => Ok(Some((*len).into())),
+            DecoderState::FrameComplete { len, ..} => Ok(Some((*len).into())),
             _ => Ok(None),
         }
     }
 
-    fn calc_updated(self, encoded_byte: u8, out: &mut [u8]) -> Result<Header, Error> {
+    fn calc_updated(self, encoded_byte: u8, out: &mut [u8]) -> Result<DecoderState, Error> {
         match self {
-            Header::Start => Ok(Header::MagicByte {
+            DecoderState::AwaitingSync => Ok(DecoderState::AwaitingEscape {
                 start: StartByte::new_decode(encoded_byte)?,
                 crc: Crc::new(),
             }),
-            Header::MagicByte { mut crc, start } => {
+            DecoderState::AwaitingEscape { mut crc, start } => {
                 let magic_byte = MagicByte::new_decode(encoded_byte, &mut crc)?;
-                Ok(Header::Length {
+                Ok(DecoderState::AwaitingLen {
                     start,
                     magic_byte,
                     crc,
                 })
             }
-            Header::Length {
+            DecoderState::AwaitingLen {
                 start,
                 magic_byte,
                 mut crc,
             } => {
                 let len = LengthByte::new_decode(magic_byte, encoded_byte, &mut crc)?;
-                Ok(Header::Data {
+                Ok(DecoderState::ReadingPayload {
                     start,
                     magic_byte,
                     crc,
@@ -76,7 +76,7 @@ impl Header {
                     index: 0,
                 })
             }
-            Header::Data {
+            DecoderState::ReadingPayload {
                 start,
                 magic_byte,
                 len,
@@ -87,7 +87,7 @@ impl Header {
                     DataByte::new_decode(magic_byte, encoded_byte, &mut crc)?.into();
                 index += 1;
                 Ok(if index >= len.into() {
-                    Header::Crc {
+                    DecoderState::AwaitingCrc {
                         start,
                         magic_byte,
                         len,
@@ -97,18 +97,18 @@ impl Header {
                     self
                 })
             }
-            Header::Crc {
+            DecoderState::AwaitingCrc {
                 start,
                 magic_byte,
                 len,
                 crc,
-            } => Ok(Header::Complete {
+            } => Ok(DecoderState::FrameComplete {
                 start,
                 magic_byte,
                 len,
                 crc: CrcByte::new_decode(crc, magic_byte, encoded_byte)?,
             }),
-            Header::Complete { .. } => Ok(Header::MagicByte {
+            DecoderState::FrameComplete { .. } => Ok(DecoderState::AwaitingEscape {
                 start: StartByte::new_decode(encoded_byte)?,
                 crc: Crc::new(),
             }),
