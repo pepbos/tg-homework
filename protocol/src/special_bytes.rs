@@ -1,40 +1,42 @@
-use crate::{*};
+use crate::*;
 
 #[derive(Copy, Clone)]
-pub struct StartByte {_private: ()}
+pub struct SyncByte {
+    _private: (),
+}
 
-impl StartByte {
-    pub fn new_decode(byte: u8) -> Result<Self, Error> {
-        if byte != START {
-            return Err(Error::LateStart);
+impl SyncByte {
+    pub fn decode(byte: u8) -> Result<Self, Error> {
+        if byte != SYNC {
+            return Err(Error::LateSync);
         }
-        Ok(Self {_private: ()})
+        Ok(Self { _private: () })
     }
 }
 
-fn ne_start(byte: u8) -> Result<(), Error> {
-    if byte == START {
-        Err(Error::EarlyStart)
+fn ensure_not_sync(byte: u8) -> Result<(), Error> {
+    if byte == SYNC {
+        Err(Error::EarlySync)
     } else {
         Ok(())
     }
 }
 
 #[derive(Copy, Clone)]
-pub struct MagicByte {
+pub struct EscapeByte {
     value: u8,
 }
 
-impl MagicByte {
-    pub fn new_decode(encoded_byte: u8, crc: &mut Crc) -> Result<Self, Error> {
-        ne_start(encoded_byte)?;
-        let value = crc.process_encoded_byte(encoded_byte);
+impl EscapeByte {
+    pub fn decode(encoded: u8, crc: &mut Crc) -> Result<Self, Error> {
+        ensure_not_sync(encoded)?;
+        let value = crc.update(encoded);
         Ok(Self { value })
     }
 
-    pub fn decode_byte(&self, encoded_byte: u8) -> u8 {
+    fn unescape(&self, encoded_byte: u8) -> u8 {
         if encoded_byte == self.value {
-            START
+            SYNC
         } else {
             encoded_byte
         }
@@ -42,34 +44,30 @@ impl MagicByte {
 }
 
 #[derive(Copy, Clone)]
-pub struct LengthByte {
+pub struct LenByte {
     value: u8,
 }
 
-impl LengthByte {
-    pub fn new_decode(magic_byte: MagicByte, encoded_byte: u8, crc: &mut Crc) -> Result<Self, Error> {
-        ne_start(encoded_byte)?;
-        let value = magic_byte.decode_byte(crc.process_encoded_byte(encoded_byte));
+impl LenByte {
+    pub fn decode(encoded: u8, escape: EscapeByte, crc: &mut Crc) -> Result<Self, Error> {
+        ensure_not_sync(encoded)?;
+        let value = escape.unescape(crc.update(encoded));
         if value > MAX_FRAME_LEN {
-            return Err(Error::InvalidLength(value));
+            return Err(Error::InvalidLen(value));
         }
         Ok(Self { value })
     }
 }
 
 #[derive(Copy, Clone)]
-pub struct DataByte {
+pub struct PayloadByte {
     value: u8,
 }
 
-impl DataByte {
-    pub fn new_decode(
-        magic_byte: MagicByte,
-        encoded_byte: u8,
-        crc: &mut Crc,
-    ) -> Result<Self, Error> {
-        ne_start(encoded_byte)?;
-        let value = magic_byte.decode_byte(crc.process_encoded_byte(encoded_byte));
+impl PayloadByte {
+    pub fn decode(encoded: u8, escape: EscapeByte, crc: &mut Crc) -> Result<Self, Error> {
+        ensure_not_sync(encoded)?;
+        let value = escape.unescape(crc.update(encoded));
         Ok(Self { value })
     }
 }
@@ -80,11 +78,11 @@ pub struct CrcByte {
 }
 
 impl CrcByte {
-    pub fn new_decode(crc: Crc, magic_byte: MagicByte, encoded_byte: u8) -> Result<Self, Error> {
-        let value = magic_byte.decode_byte(encoded_byte);
-        let expected = crc.compute();
+    pub fn decode(encoded: u8, escape: EscapeByte, crc: Crc) -> Result<Self, Error> {
+        let value = escape.unescape(encoded);
+        let expected = crc.finalize();
         if value != expected {
-            return Err(Error::CrcFailed {
+            return Err(Error::InvalidCrc {
                 got: value,
                 expected,
             });
@@ -93,17 +91,17 @@ impl CrcByte {
     }
 }
 
-impl Into<u8> for DataByte {
+impl Into<u8> for PayloadByte {
     fn into(self) -> u8 {
         self.value
     }
 }
-impl Into<u8> for LengthByte {
+impl Into<u8> for LenByte {
     fn into(self) -> u8 {
         self.value
     }
 }
-impl Into<usize> for LengthByte {
+impl Into<usize> for LenByte {
     fn into(self) -> usize {
         self.value as usize
     }

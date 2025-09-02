@@ -3,31 +3,31 @@ use crate::*;
 enum DecoderState {
     AwaitingSync,
     AwaitingEscape {
-        start: StartByte,
+        start: SyncByte,
         crc: Crc,
     },
     AwaitingLen {
-        start: StartByte,
-        magic_byte: MagicByte,
+        start: SyncByte,
+        escape: EscapeByte,
         crc: Crc,
     },
     ReadingPayload {
-        start: StartByte,
-        magic_byte: MagicByte,
-        len: LengthByte,
+        start: SyncByte,
+        escape: EscapeByte,
+        len: LenByte,
         index: u8,
         crc: Crc,
     },
     AwaitingCrc {
-        start: StartByte,
-        magic_byte: MagicByte,
-        len: LengthByte,
+        start: SyncByte,
+        escape: EscapeByte,
+        len: LenByte,
         crc: Crc,
     },
     FrameComplete {
-        start: StartByte,
-        magic_byte: MagicByte,
-        len: LengthByte,
+        start: SyncByte,
+        escape: EscapeByte,
+        len: LenByte,
         crc: CrcByte,
     },
 }
@@ -39,38 +39,37 @@ impl Default for DecoderState {
 }
 
 impl DecoderState {
-    pub fn decode_byte_in_place(&mut self, encoded_byte: u8, out: &mut [u8]) -> Result<Option<usize>, Error> {
-        *self =
-            core::mem::take(self).calc_updated(encoded_byte, out)?;
+    pub fn decode_byte_in_place(
+        &mut self,
+        encoded_byte: u8,
+        out: &mut [u8],
+    ) -> Result<Option<usize>, Error> {
+        *self = core::mem::take(self).calc_updated(encoded_byte, out)?;
         match self {
-            DecoderState::FrameComplete { len, ..} => Ok(Some((*len).into())),
+            DecoderState::FrameComplete { len, .. } => Ok(Some((*len).into())),
             _ => Ok(None),
         }
     }
 
-    fn calc_updated(self, encoded_byte: u8, out: &mut [u8]) -> Result<DecoderState, Error> {
+    fn calc_updated(self, encoded: u8, out: &mut [u8]) -> Result<DecoderState, Error> {
         match self {
             DecoderState::AwaitingSync => Ok(DecoderState::AwaitingEscape {
-                start: StartByte::new_decode(encoded_byte)?,
-                crc: Crc::new(),
+                start: SyncByte::decode(encoded)?,
+                crc: Crc::default(),
             }),
             DecoderState::AwaitingEscape { mut crc, start } => {
-                let magic_byte = MagicByte::new_decode(encoded_byte, &mut crc)?;
-                Ok(DecoderState::AwaitingLen {
-                    start,
-                    magic_byte,
-                    crc,
-                })
+                let escape = EscapeByte::decode(encoded, &mut crc)?;
+                Ok(DecoderState::AwaitingLen { start, escape, crc })
             }
             DecoderState::AwaitingLen {
                 start,
-                magic_byte,
+                escape,
                 mut crc,
             } => {
-                let len = LengthByte::new_decode(magic_byte, encoded_byte, &mut crc)?;
+                let len = LenByte::decode(encoded, escape, &mut crc)?;
                 Ok(DecoderState::ReadingPayload {
                     start,
-                    magic_byte,
+                    escape,
                     crc,
                     len,
                     index: 0,
@@ -78,18 +77,17 @@ impl DecoderState {
             }
             DecoderState::ReadingPayload {
                 start,
-                magic_byte,
+                escape,
                 len,
                 mut index,
                 mut crc,
             } => {
-                out[index as usize] =
-                    DataByte::new_decode(magic_byte, encoded_byte, &mut crc)?.into();
+                out[index as usize] = PayloadByte::decode(encoded, escape, &mut crc)?.into();
                 index += 1;
                 Ok(if index >= len.into() {
                     DecoderState::AwaitingCrc {
                         start,
-                        magic_byte,
+                        escape,
                         len,
                         crc,
                     }
@@ -99,18 +97,18 @@ impl DecoderState {
             }
             DecoderState::AwaitingCrc {
                 start,
-                magic_byte,
+                escape,
                 len,
                 crc,
             } => Ok(DecoderState::FrameComplete {
                 start,
-                magic_byte,
+                escape,
                 len,
-                crc: CrcByte::new_decode(crc, magic_byte, encoded_byte)?,
+                crc: CrcByte::decode(encoded, escape, crc)?,
             }),
             DecoderState::FrameComplete { .. } => Ok(DecoderState::AwaitingEscape {
-                start: StartByte::new_decode(encoded_byte)?,
-                crc: Crc::new(),
+                start: SyncByte::decode(encoded)?,
+                crc: Crc::default(),
             }),
         }
     }

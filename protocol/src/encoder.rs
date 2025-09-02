@@ -1,4 +1,4 @@
-use crate::{Crc, MAX_FRAME_LEN, START, find_magic_byte};
+use crate::{Crc, MAX_FRAME_LEN, SYNC, find_magic_byte};
 
 /// Encoded message:
 /// - START
@@ -26,30 +26,30 @@ pub fn encode_in_place(data: &[u8], out: &mut [u8]) -> usize {
     let magic_byte = find_magic_byte(data);
 
     // Initialize the crc computation.
-    let mut crc = Crc::new();
+    let mut crc = Crc::default();
 
     // Start writing bytes.
     let mut iter = out.iter_mut();
-    *iter.next().unwrap() = START;
+    *iter.next().unwrap() = SYNC;
 
     {
         // Helper for encoding the magic byte, updating the crc, and writing to the output buffer.
         let mut set_next = |byte: u8| {
-            crc.process_encoded_byte(byte);
+            crc.update(byte);
             *iter.next().unwrap() = byte;
         };
 
         set_next(magic_byte.into());
         set_next(data.len() as u8);
         for &byte in data.iter() {
-            set_next(if byte == START { magic_byte } else { byte });
+            set_next(if byte == SYNC { magic_byte } else { byte });
         }
     }
 
     // Finally write the crc.
     {
-        let byte = crc.compute();
-        *iter.next().unwrap() = if byte == START { magic_byte } else { byte };
+        let byte = crc.finalize();
+        *iter.next().unwrap() = if byte == SYNC { magic_byte } else { byte };
     }
 
     // Return number of bytes written.

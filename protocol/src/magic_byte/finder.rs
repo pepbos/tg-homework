@@ -1,6 +1,6 @@
 use bitvec::prelude::*;
 
-use crate::START;
+use crate::SYNC;
 
 const MAX_FRAME_LEN: usize = crate::MAX_FRAME_LEN as usize;
 
