@@ -1,5 +1,7 @@
 use bitvec::prelude::*;
 
+use crate::START;
+
 const MAX_FRAME_LEN: usize = crate::MAX_FRAME_LEN as usize;
 
 type Storage = u8;
