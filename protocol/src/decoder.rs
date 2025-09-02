@@ -16,7 +16,7 @@ pub enum DecoderState {
         start: SyncByte,
         escape: EscapeByte,
         len: LenByte,
-        index: u8,
+        index: usize,
         crc: Crc,
     },
     AwaitingCrc {
@@ -81,12 +81,11 @@ impl DecoderState {
                 start,
                 escape,
                 len,
-                mut index,
+                index,
                 mut crc,
             } => {
-                out[index as usize] = PayloadByte::decode(encoded, escape, &mut crc)?.into();
-                index += 1;
-                Ok(if index >= len.into() {
+                out[index] = PayloadByte::decode(encoded, escape, &mut crc)?.into();
+                Ok(if index + 1 >= len.into() {
                     DecoderState::AwaitingCrc {
                         start,
                         escape,
@@ -95,7 +94,13 @@ impl DecoderState {
                         crc,
                     }
                 } else {
-                    self
+                    DecoderState::ReadingPayload {
+                        start,
+                        escape,
+                        len,
+                        index: index + 1,
+                        crc,
+                    }
                 })
             }
             DecoderState::AwaitingCrc {
