@@ -1,11 +1,5 @@
-use crate::{Crc, MAX_FRAME_LEN, SYNC, find_magic_byte};
+use crate::{Crc, MAX_FRAME_LEN, SYNC, find_escape};
 
-/// Encoded message:
-/// - START
-/// - MagicByte
-/// - Length
-/// - Data
-/// - Crc
 pub fn encode_in_place(data: &[u8], out: &mut [u8]) -> usize {
     // Some size checks first.
     assert!(
@@ -22,14 +16,16 @@ pub fn encode_in_place(data: &[u8], out: &mut [u8]) -> usize {
         out.len()
     );
 
-    // Compute the magic byte that replaces all occurances of the START byte.
-    let magic_byte = find_magic_byte(data);
+    // Compute the escape character that replaces all occurances of the SYNC byte.
+    let escape = find_escape(data);
 
     // Initialize the crc computation.
     let mut crc = Crc::default();
 
     // Start writing bytes.
     let mut iter = out.iter_mut();
+
+    // Byte0. SYNC
     *iter.next().unwrap() = SYNC;
 
     {
@@ -39,17 +35,20 @@ pub fn encode_in_place(data: &[u8], out: &mut [u8]) -> usize {
             *iter.next().unwrap() = byte;
         };
 
-        set_next(magic_byte.into());
+        // Byte1. ESCAPE
+        set_next(escape.into());
+        // Byte2. LEN
         set_next(data.len() as u8);
+        // Byte3..Byte[3+LEN]. PAYLOAD
         for &byte in data.iter() {
-            set_next(if byte == SYNC { magic_byte } else { byte });
+            set_next(if byte == SYNC { escape } else { byte });
         }
     }
 
-    // Finally write the crc.
+    // Byte[3+LEN]. CRC
     {
         let byte = crc.finalize();
-        *iter.next().unwrap() = if byte == SYNC { magic_byte } else { byte };
+        *iter.next().unwrap() = if byte == SYNC { escape } else { byte };
     }
 
     // Return number of bytes written.

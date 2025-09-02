@@ -1,13 +1,13 @@
 #![no_std]
 
 mod crc;
-mod magic_byte;
+mod escape;
 mod encoder;
 mod decoder;
 mod special_bytes;
 
 pub(crate) use crc::Crc;
-pub(crate) use magic_byte::find_magic_byte;
+pub(crate) use escape::find_escape;
 pub(crate) use special_bytes::*;
 
 pub const SYNC: u8 = 0xFF;

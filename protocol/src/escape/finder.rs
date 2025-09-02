@@ -6,11 +6,11 @@ const MAX_FRAME_LEN: usize = crate::MAX_FRAME_LEN as usize;
 
 type Storage = u8;
 
-struct MagicByteFinder {
+struct EscapeFinder {
     possible_bytes: BitArr!(for MAX_FRAME_LEN, in Storage, Lsb0),
 }
 
-impl Default for MagicByteFinder {
+impl Default for EscapeFinder {
     fn default() -> Self {
         Self {
             possible_bytes: bitarr![Storage, Lsb0; 1; MAX_FRAME_LEN],
@@ -18,7 +18,7 @@ impl Default for MagicByteFinder {
     }
 }
 
-impl MagicByteFinder {
+impl EscapeFinder {
     #[inline]
     fn exclude_byte(&mut self, byte: u8) {
         if byte >= crate::MAX_FRAME_LEN {
@@ -28,7 +28,7 @@ impl MagicByteFinder {
     }
 
     #[inline]
-    fn find_magic_byte(self) -> u8 {
+    fn find_escape(self) -> u8 {
         for (byte, is_possible) in self.possible_bytes.iter().by_vals().enumerate() {
             if is_possible {
                 return byte as u8;
@@ -38,27 +38,27 @@ impl MagicByteFinder {
     }
 }
 
-pub fn find_magic_byte(data: &[u8]) -> u8 {
+pub fn find_escape(data: &[u8]) -> u8 {
     assert!(
         data.len() <= MAX_FRAME_LEN,
         "data length must not exceed {}, got len = {}",
         MAX_FRAME_LEN,
         data.len()
     );
-    let mut finder = MagicByteFinder::default();
+    let mut finder = EscapeFinder::default();
     for &byte in data {
         finder.exclude_byte(byte);
     }
-    finder.find_magic_byte()
+    finder.find_escape()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::find_magic_byte;
+    use super::find_escape;
     use bitvec::prelude::*;
 
     #[test]
-    fn test_find_magic_byte() {
+    fn test_find_escape() {
         let arr = bitarr![u32, Lsb0; 0; 80];
 
         use rand::prelude::*;
@@ -71,11 +71,11 @@ mod tests {
             *byte = rng.random::<u8>();
         }
 
-        // Find the magic byte.
-        let magic_byte = find_magic_byte(&bytes);
+        // Find the escape character.
+        let escape = find_escape(&bytes);
         // Test that the magic byte is indeed not part of our data.
         for byte in bytes {
-            assert_ne!(magic_byte, byte);
+            assert_ne!(escape, byte);
         }
     }
 }
