@@ -34,12 +34,9 @@ impl EscapeByte {
         Ok(Self { value })
     }
 
-    fn unescape(&self, encoded_byte: u8) -> u8 {
-        if encoded_byte == self.value {
-            SYNC
-        } else {
-            encoded_byte
-        }
+    fn unescape(&self, encoded: u8) -> Result<u8, Error> {
+        ensure_not_sync(encoded)?;
+        Ok(if encoded == self.value { SYNC } else { encoded })
     }
 }
 
@@ -50,8 +47,7 @@ pub struct LenByte {
 
 impl LenByte {
     pub fn decode(encoded: u8, escape: EscapeByte, crc: &mut Crc) -> Result<Self, Error> {
-        ensure_not_sync(encoded)?;
-        let value = escape.unescape(crc.update(encoded));
+        let value = escape.unescape(crc.update(encoded))?;
         if value > MAX_FRAME_LEN {
             return Err(Error::InvalidLen(value));
         }
@@ -66,8 +62,7 @@ pub struct PayloadByte {
 
 impl PayloadByte {
     pub fn decode(encoded: u8, escape: EscapeByte, crc: &mut Crc) -> Result<Self, Error> {
-        ensure_not_sync(encoded)?;
-        let value = escape.unescape(crc.update(encoded));
+        let value = escape.unescape(crc.update(encoded))?;
         Ok(Self { value })
     }
 }
