@@ -1,24 +1,14 @@
 use crate::{*};
 
 #[derive(Copy, Clone)]
-pub struct StartByte {}
+pub struct StartByte {_private: ()}
 
 impl StartByte {
-    pub fn new_encode() -> Self {
-        Self {}
-    }
-
     pub fn new_decode(byte: u8) -> Result<Self, Error> {
         if byte != START {
             return Err(Error::LateStart);
         }
-        Ok(Self {})
-    }
-}
-
-impl PartialEq<u8> for StartByte {
-    fn eq(&self, other: &u8) -> bool {
-        *other == START
+        Ok(Self {_private: ()})
     }
 }
 
@@ -36,20 +26,10 @@ pub struct MagicByte {
 }
 
 impl MagicByte {
-    pub fn new_encode(data: &[u8]) -> Self {
-        Self {
-            value: find_magic_byte(data),
-        }
-    }
-
     pub fn new_decode(encoded_byte: u8, crc: &mut Crc) -> Result<Self, Error> {
         ne_start(encoded_byte)?;
         let value = crc.process_encoded_byte(encoded_byte);
         Ok(Self { value })
-    }
-
-    pub fn encode_byte(&self, byte: u8) -> u8 {
-        if byte == START { self.value } else { byte }
     }
 
     pub fn decode_byte(&self, encoded_byte: u8) -> u8 {
