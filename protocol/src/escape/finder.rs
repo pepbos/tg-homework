@@ -54,8 +54,7 @@ pub fn find_escape(data: &[u8]) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::find_escape;
-    use bitvec::prelude::*;
+    use super::*;
 
     #[test]
     fn test_find_escape() {
