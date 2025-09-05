@@ -14,12 +14,10 @@ impl Decoder {
 
     pub fn decode_in_place(
         &mut self,
-        encoded: &[u8],
+        encoded: u8,
         out: &mut [u8],
     ) -> Result<Option<Header>, Error> {
-        for &b in encoded.iter() {
-            self.state.decode_byte_in_place(b, out)?;
-        }
+        self.state.decode_byte_in_place(encoded, out)?;
         match self.state {
             DecoderState::FrameComplete(header) => Ok(Some(header)),
             _ => Ok(None),
