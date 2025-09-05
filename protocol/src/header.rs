@@ -12,7 +12,11 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn get_len(&self) -> usize {
+    pub fn get_payload_len(&self) -> usize {
+        self.len as usize + HEADER_LEN
+    }
+
+    pub fn get_frame_len(&self) -> usize {
         self.len as usize + HEADER_LEN
     }
 
@@ -53,5 +57,9 @@ impl Header {
             len,
             crc,
         }
+    }
+
+    pub fn id(&self) -> u8 {
+        self.id
     }
 }
