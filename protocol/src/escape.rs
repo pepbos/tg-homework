@@ -6,7 +6,7 @@ const MAX_BYTE_KINDS: u8 = crate::MAX_FRAME_LEN + HEADER_LEN as u8 - 2;
 
 type Storage = u8; // TODO use u32
 
-pub struct EscapeState {
+pub(crate) struct EscapeState {
     possible_bytes: BitArr!(for MAX_BYTE_KINDS as usize, in Storage, Lsb0),
     count: usize,
 }
