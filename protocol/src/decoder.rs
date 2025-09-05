@@ -4,34 +4,36 @@ use crate::*;
 pub enum DecoderState {
     AwaitingSync,
     AwaitingEscape {
-        start: SyncByte,
+        sync: u8,
+    },
+    AwaitingId {
+        sync: u8,
+        escape: Escape,
         crc: Crc,
     },
     AwaitingLen {
-        start: SyncByte,
-        escape: EscapeByte,
+        sync: u8,
+        escape: Escape,
+        id: u8,
         crc: Crc,
     },
     ReadingPayload {
-        start: SyncByte,
-        escape: EscapeByte,
-        len: LenByte,
+        sync: u8,
+        escape: Escape,
+        id: u8,
+        len: u8,
         index: usize,
         crc: Crc,
     },
     AwaitingCrc {
-        start: SyncByte,
-        escape: EscapeByte,
-        len: LenByte,
+        sync: u8,
+        escape: Escape,
+        id: u8,
+        len: u8,
         crc: Crc,
         byte_buffer: Option<u8>,
     },
-    FrameComplete {
-        start: SyncByte,
-        escape: EscapeByte,
-        len: LenByte,
-        crc: CrcByte,
-    },
+    FrameComplete(Header),
 }
 
 impl Default for DecoderState {
@@ -40,14 +42,47 @@ impl Default for DecoderState {
     }
 }
 
-pub fn decode_in_place(encoded: &[u8], out: &mut [u8]) -> Result<usize, Error> {
+pub fn decode_in_place(encoded: &[u8], out: &mut [u8]) -> Result<Header, Error> {
     let mut decoder = DecoderState::default();
     for &b in encoded.iter() {
         decoder.decode_byte_in_place(b, out)?;
     }
     match decoder {
-        DecoderState::FrameComplete { len, .. } => Ok(len.into()),
+        DecoderState::FrameComplete(header) => Ok(header),
         _ => Err(Error::FrameIncomplete(decoder)),
+    }
+}
+
+fn verify_sync(encoded: u8) -> Result<u8, Error> {
+    if encoded != SYNC {
+        return Err(Error::LateSync);
+    }
+    Ok(encoded)
+}
+
+fn unescape_and_update_crc(encoded: u8, escape: &Escape, crc: &mut Crc) -> Result<u8, Error> {
+    Ok(crc.update(escape.unescape(encoded)?))
+}
+
+fn verify_len(len: u8) -> Result<u8, Error> {
+    if len > MAX_FRAME_LEN {
+        Err(Error::InvalidLen(len))
+    } else {
+        Ok(len)
+    }
+}
+
+fn verify_checksum(checksum: [u8; 2], crc: Crc) -> Result<[u8; 2], Error> {
+    let expected = crc.finalize();
+    let got = checksum;
+    if got
+        .iter()
+        .zip(expected.iter())
+        .all(|(left, right)| left == right)
+    {
+        Ok(checksum)
+    } else {
+        Err(Error::InvalidCrc { got, expected })
     }
 }
 
@@ -56,10 +91,10 @@ impl DecoderState {
         &mut self,
         encoded_byte: u8,
         out: &mut [u8],
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<&Header>, Error> {
         *self = core::mem::take(self).calc_updated(encoded_byte, out)?;
         match self {
-            DecoderState::FrameComplete { len, .. } => Ok(Some((*len).into())),
+            DecoderState::FrameComplete(header) => Ok(Some(header)),
             _ => Ok(None),
         }
     }
@@ -67,80 +102,109 @@ impl DecoderState {
     fn calc_updated(self, encoded: u8, out: &mut [u8]) -> Result<DecoderState, Error> {
         match self {
             DecoderState::AwaitingSync => Ok(DecoderState::AwaitingEscape {
-                start: SyncByte::decode(encoded)?,
-                crc: Crc::default(),
+                sync: verify_sync(encoded)?,
             }),
-            DecoderState::AwaitingEscape { mut crc, start } => {
-                let escape = EscapeByte::decode(encoded, &mut crc)?;
-                Ok(DecoderState::AwaitingLen { start, escape, crc })
+            DecoderState::AwaitingEscape { sync } => {
+                let escape = Escape::try_from_raw(encoded)?;
+                Ok(DecoderState::AwaitingId {
+                    sync,
+                    escape,
+                    crc: Crc::new(),
+                })
             }
-            DecoderState::AwaitingLen {
-                start,
+            DecoderState::AwaitingId {
+                sync,
                 escape,
                 mut crc,
             } => {
-                let len = LenByte::decode(encoded, escape, &mut crc)?;
+                let id = unescape_and_update_crc(encoded, &escape, &mut crc)?;
+                Ok(DecoderState::AwaitingLen {
+                    sync,
+                    escape,
+                    id,
+                    crc,
+                })
+            }
+            DecoderState::AwaitingLen {
+                sync,
+                escape,
+                id,
+                mut crc,
+            } => {
+                let len =
+                    unescape_and_update_crc(encoded, &escape, &mut crc).and_then(verify_len)?;
                 Ok(DecoderState::ReadingPayload {
-                    start,
+                    sync,
                     escape,
                     crc,
                     len,
                     index: 0,
+                    id,
                 })
             }
             DecoderState::ReadingPayload {
-                start,
+                sync,
                 escape,
+                id,
                 len,
                 index,
                 mut crc,
             } => {
-                out[index] = PayloadByte::decode(encoded, escape, &mut crc)?.into();
+                out[index] = unescape_and_update_crc(encoded, &escape, &mut crc)?;
                 Ok(if index + 1 >= len.into() {
                     DecoderState::AwaitingCrc {
-                        start,
+                        sync,
                         escape,
                         len,
                         byte_buffer: None,
                         crc,
+                        id,
                     }
                 } else {
                     DecoderState::ReadingPayload {
-                        start,
+                        sync,
                         escape,
                         len,
                         index: index + 1,
                         crc,
+                        id,
                     }
                 })
             }
             DecoderState::AwaitingCrc {
-                start,
+                sync,
                 escape,
+                id,
                 len,
                 crc,
                 byte_buffer,
-            } => Ok(if let Some(first) = byte_buffer {
-                let second = encoded;
-                DecoderState::FrameComplete {
-                    start,
-                    escape,
-                    len,
-                    crc: CrcByte::decode([first, second], escape, crc)?,
+            } => {
+                if let Some(first) = byte_buffer {
+                    let second = encoded;
+                    let checksum = [first, second]
+                        .try_map(|b| escape.unescape(b))
+                        .and_then(|checksum| verify_checksum(checksum, crc))?;
+                    Ok(DecoderState::FrameComplete(Header {
+                        sync,
+                        escape: escape.into(),
+                        id,
+                        len,
+                        crc: checksum,
+                    }))
+                } else {
+                    Ok(DecoderState::AwaitingCrc {
+                        sync,
+                        escape,
+                        id,
+                        len,
+                        byte_buffer: Some(encoded),
+                        crc,
+                    })
                 }
-            } else {
-                DecoderState::AwaitingCrc {
-                    start,
-                    escape,
-                    len,
-                    byte_buffer: Some(encoded),
-                    crc,
-                }
-            }),
-            DecoderState::FrameComplete { .. } => Ok(DecoderState::AwaitingEscape {
-                start: SyncByte::decode(encoded)?,
-                crc: Crc::default(),
-            }),
+            }
+            DecoderState::FrameComplete { .. } => {
+                DecoderState::AwaitingSync.calc_updated(encoded, out)
+            }
         }
     }
 }

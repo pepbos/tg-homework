@@ -1,13 +1,11 @@
-use crate::{Crc, MAX_FRAME_LEN, SYNC, find_escape};
+use crate::{frame::HEADER_LEN, Crc, Escape, Header, MAX_FRAME_LEN, SYNC};
 
-pub fn encode_in_place(data: &[u8], out: &mut [u8]) -> usize {
-    // Some size checks first.
-    assert!(
-        data.len() <= MAX_FRAME_LEN as usize,
-        "data size = {} must not exceed max allowed size = {}",
-        data.len(),
-        MAX_FRAME_LEN
-    );
+pub fn encoded_len(data: &[u8]) -> usize {
+    data.len() + HEADER_LEN
+}
+
+pub fn encode_in_place(id: u8, data: &[u8], out: &mut [u8]) -> Header {
+    // Output buffer size check.
     let encoded_len = encoded_len(data);
     assert!(
         out.len() >= encoded_len,
@@ -16,44 +14,24 @@ pub fn encode_in_place(data: &[u8], out: &mut [u8]) -> usize {
         out.len()
     );
 
-    // Compute the escape character that replaces all occurances of the SYNC byte.
-    let escape = find_escape(data);
-
-    // Initialize the crc computation.
-    let mut crc = Crc::default();
-
-    // Start writing bytes.
+    let header = Header::new(id, data);
     let mut iter = out.iter_mut();
 
-    // Byte0. SYNC
-    *iter.next().unwrap() = SYNC;
+    *iter.next().unwrap() = header.sync;
+    *iter.next().unwrap() = header.escape.into();
 
-    {
-        // Helper for encoding the magic byte, updating the crc, and writing to the output buffer.
-        let mut set_next = |byte: u8| {
-            crc.update(byte);
-            *iter.next().unwrap() = byte;
-        };
+    let mut escape_and_push = |byte: u8| {
+        *iter.next().unwrap() = header.escape.escape_byte(byte);
+    };
 
-        // Byte1. ESCAPE
-        set_next(escape.into());
-        // Byte2. LEN
-        set_next(data.len() as u8);
-        // Byte3..Byte[3+LEN]. PAYLOAD
-        for &byte in data.iter() {
-            set_next(if byte == SYNC { escape } else { byte });
-        }
+    escape_and_push(header.id);
+    escape_and_push(header.len);
+    for &payload in data.iter() {
+        escape_and_push(payload);
+    }
+    for &crc in header.crc.iter() {
+        escape_and_push(crc);
     }
 
-    // Byte[3+LEN, 4+LEN]. CRC
-    for byte in crc.finalize() {
-        *iter.next().unwrap() = if byte == SYNC { escape } else { byte };
-    }
-
-    // Return number of bytes written.
-    encoded_len
-}
-
-pub fn encoded_len(data: &[u8]) -> usize {
-    data.len() + 5
+    header
 }
