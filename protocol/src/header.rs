@@ -2,7 +2,7 @@ use crate::{CrcState, Escape, EscapeState, MAX_FRAME_LEN, SYNC};
 
 pub const HEADER_LEN: usize = 6;
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Header {
     pub(crate) sync: u8,
     pub(crate) escape: Escape,
