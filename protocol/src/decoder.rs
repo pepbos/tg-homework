@@ -9,13 +9,13 @@ pub enum DecoderState {
     AwaitingId {
         sync: u8,
         escape: Escape,
-        crc: Crc,
+        crc: CrcState,
     },
     AwaitingLen {
         sync: u8,
         escape: Escape,
         id: u8,
-        crc: Crc,
+        crc: CrcState,
     },
     ReadingPayload {
         sync: u8,
@@ -23,14 +23,14 @@ pub enum DecoderState {
         id: u8,
         len: u8,
         index: usize,
-        crc: Crc,
+        crc: CrcState,
     },
     AwaitingCrc {
         sync: u8,
         escape: Escape,
         id: u8,
         len: u8,
-        crc: Crc,
+        crc: CrcState,
         byte_buffer: Option<u8>,
     },
     FrameComplete(Header),
@@ -60,8 +60,8 @@ fn verify_sync(encoded: u8) -> Result<u8, Error> {
     Ok(encoded)
 }
 
-fn unescape_and_update_crc(encoded: u8, escape: &Escape, crc: &mut Crc) -> Result<u8, Error> {
-    Ok(crc.update(escape.unescape(encoded)?))
+fn unescape_and_update_crc(encoded: u8, escape: &Escape, crc: &mut CrcState) -> Result<u8, Error> {
+    Ok(crc.digest_single(escape.unescape(encoded)?))
 }
 
 fn verify_len(len: u8) -> Result<u8, Error> {
@@ -72,7 +72,7 @@ fn verify_len(len: u8) -> Result<u8, Error> {
     }
 }
 
-fn verify_checksum(checksum: [u8; 2], crc: Crc) -> Result<[u8; 2], Error> {
+fn verify_checksum(checksum: [u8; 2], crc: CrcState) -> Result<[u8; 2], Error> {
     let expected = crc.finalize();
     let got = checksum;
     if got
@@ -109,7 +109,7 @@ impl DecoderState {
                 Ok(DecoderState::AwaitingId {
                     sync,
                     escape,
-                    crc: Crc::new(),
+                    crc: CrcState::new(),
                 })
             }
             DecoderState::AwaitingId {

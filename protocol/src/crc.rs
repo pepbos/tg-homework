@@ -1,14 +1,14 @@
 #[derive(Copy, Clone, Debug)]
-pub struct Crc {
+pub struct CrcState {
     crc16: crc16::State<crc16::ARC>,
 }
 
-impl Crc {
+impl CrcState {
     pub fn new() -> Self {
         Self {crc16: crc16::State::new()}
     }
 
-    pub fn update(&mut self, byte: u8) -> u8 {
+    pub fn digest_single(&mut self, byte: u8) -> u8 {
         self.crc16.update(&[byte]);
         byte
     }

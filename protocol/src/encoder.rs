@@ -1,4 +1,4 @@
-use crate::{frame::HEADER_LEN, Crc, Escape, Header, MAX_FRAME_LEN, SYNC};
+use crate::{frame::HEADER_LEN, CrcState, Escape, Header, MAX_FRAME_LEN, SYNC};
 
 pub fn encoded_len(data: &[u8]) -> usize {
     data.len() + HEADER_LEN

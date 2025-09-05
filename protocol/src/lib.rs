@@ -7,7 +7,7 @@ mod encoder;
 mod escape;
 mod frame;
 
-pub(crate) use crc::Crc;
+pub(crate) use crc::CrcState;
 pub use decoder::{DecoderState, decode_in_place};
 pub use encoder::{encode_in_place, encoded_len};
 pub use frame::Header;

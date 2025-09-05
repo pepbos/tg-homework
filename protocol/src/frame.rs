@@ -1,4 +1,4 @@
-use crate::{Crc, Escape, EscapeState, MAX_FRAME_LEN, SYNC};
+use crate::{CrcState, Escape, EscapeState, MAX_FRAME_LEN, SYNC};
 
 pub const HEADER_LEN: usize = 6;
 
@@ -30,9 +30,9 @@ impl Header {
         };
 
         let crc: [u8; 2] = {
-            let mut crc = Crc::new();
-            crc.update(id);
-            crc.update(len);
+            let mut crc = CrcState::new();
+            crc.digest_single(id);
+            crc.digest_single(len);
             crc.digest(data);
             crc.finalize()
         };
