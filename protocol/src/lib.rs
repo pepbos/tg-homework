@@ -1,3 +1,26 @@
+//! Custom UART protocol.
+//!
+//! This crate contains a protocol for sending data over uart.
+//!
+//! Data can be send in packages of up to 128 bytes, and one identifier byte, at a time. The data
+//! is encoded in a frame, with the following bytes:
+//!
+//! |       | SYNC | ESC | ID | LEN | PAYLOAD | CRC |
+//! | ----- | ---- | --- | -- | --- | ------- | --- |
+//! | bytes |  1   |  1  | 1  |  1  |max(128) | 2   |
+//!
+//! where
+//! - [SYNC] signals the start of the frame,
+//! - `ESC` is an escape character,
+//! - `ID` is an identifier byte (for optional use),
+//! - `LEN` is the number of data bytes,
+//! - `PAYLOAD` contains the data bytes,
+//! - `CRC` is a two byte checksum.
+//!
+//! When [encoding][encode_in_place] a package to a frame all occurances of the [SYNC] byte in
+//! `ID`, `LEN`, `PAYLOAD` and `CRC` are escaped using `ESC`. [Decoding][Decoder::decode_in_place] reverses
+//! this process.
+
 #![no_std]
 #![feature(array_try_map)]
 
