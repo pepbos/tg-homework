@@ -5,19 +5,21 @@ mod crc;
 mod decoder;
 mod encoder;
 mod escape;
-mod frame;
+mod header;
 
 pub(crate) use crc::CrcState;
+pub(crate) use header::HEADER_LEN;
+
 pub use decoder::{DecoderState, decode_in_place};
 pub use encoder::{encode_in_place, encoded_len};
-pub use frame::Header;
+pub use header::Header;
 pub use escape::*;
 
 pub const SYNC: u8 = 0xFF;
 
 pub const MAX_FRAME_LEN: u8 = 0x80;
 
-pub const MAX_ENCODED_LEN: usize = MAX_FRAME_LEN as usize + frame::HEADER_LEN;
+pub const MAX_ENCODED_LEN: usize = MAX_FRAME_LEN as usize + header::HEADER_LEN;
 
 #[derive(Clone, Debug)]
 pub enum Error {

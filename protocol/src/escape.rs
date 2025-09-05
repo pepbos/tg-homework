@@ -1,4 +1,4 @@
-use crate::{Error, SYNC, frame::HEADER_LEN};
+use crate::{Error, SYNC, HEADER_LEN};
 use bitvec::prelude::*;
 
 // Number of byte kinds in a frame (excluding the SYNC and ESCAPE bytes).
