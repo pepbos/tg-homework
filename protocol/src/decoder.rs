@@ -1,7 +1,35 @@
 use crate::*;
 
 #[derive(Clone, Debug)]
-pub enum DecoderState {
+pub struct Decoder {
+    state: DecoderState,
+}
+
+impl Decoder {
+    pub fn new() -> Self {
+        Self {
+            state: DecoderState::AwaitingSync,
+        }
+    }
+
+    pub fn decode_in_place(
+        &mut self,
+        encoded: &[u8],
+        out: &mut [u8],
+    ) -> Result<Option<Header>, Error> {
+        for &b in encoded.iter() {
+            self.state.decode_byte_in_place(b, out)?;
+        }
+        match self.state {
+            DecoderState::FrameComplete(header) => Ok(Some(header)),
+            _ => Ok(None),
+        }
+    }
+}
+
+/// State machine for decoding a received frame.
+#[derive(Clone, Debug)]
+pub(crate) enum DecoderState {
     AwaitingSync,
     AwaitingEscape {
         sync: u8,
@@ -39,17 +67,6 @@ pub enum DecoderState {
 impl Default for DecoderState {
     fn default() -> Self {
         Self::AwaitingSync
-    }
-}
-
-pub fn decode_in_place(encoded: &[u8], out: &mut [u8]) -> Result<Header, Error> {
-    let mut decoder = DecoderState::default();
-    for &b in encoded.iter() {
-        decoder.decode_byte_in_place(b, out)?;
-    }
-    match decoder {
-        DecoderState::FrameComplete(header) => Ok(header),
-        _ => Err(Error::FrameIncomplete(decoder)),
     }
 }
 

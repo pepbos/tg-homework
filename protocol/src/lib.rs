@@ -10,7 +10,7 @@ mod header;
 pub(crate) use crc::CrcState;
 pub(crate) use header::HEADER_LEN;
 
-pub use decoder::{DecoderState, decode_in_place};
+pub use decoder::Decoder;
 pub use encoder::{encode_in_place, encoded_len};
 pub use header::Header;
 pub use escape::*;
@@ -27,5 +27,4 @@ pub enum Error {
     LateSync,
     InvalidLen(u8),
     InvalidCrc { got: [u8; 2], expected: [u8; 2] },
-    FrameIncomplete(DecoderState),
 }
